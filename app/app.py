@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-CATALOG = "pl_epa_air_quality"
+CATALOG = "epa_air_quality"
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 COLOURS = {
@@ -555,7 +555,7 @@ with tab_ml:
             | **Target** | 7-day rolling Lead in Air avg > 0.45 μg/m³ |
             | **Key features** | Wind speed/direction, temperature, lagged Lead/PM10/SO2 readings |
             | **Tracked in** | MLflow · Unity Catalog Model Registry |
-            | **Registered model** | `pl_epa_air_quality.gold.port_pirie_lead_breach_predictor` |
+            | **Registered model** | `epa_air_quality.gold.port_pirie_lead_breach_predictor` |
             """)
 
 
@@ -690,7 +690,7 @@ Answer the following question concisely and in plain English:
     st.markdown("---")
     st.info(
         "**Tip:** For full natural-language data exploration, embed a **Databricks AI/BI Genie** space "
-        "pointed at the `pl_epa_air_quality.gold` schema. Genie allows analysts to ask free-form "
+        "pointed at the `epa_air_quality.gold` schema. Genie allows analysts to ask free-form "
         "questions like *'Show me all days where lead exceeded the target while wind was from the north-west'* "
         "and get back charts automatically."
     )

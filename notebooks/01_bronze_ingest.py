@@ -15,7 +15,7 @@
 
 # COMMAND ----------
 
-CATALOG = "pl_epa_air_quality"
+CATALOG = "epa_air_quality"
 STATION_ID = "PTP01"
 VOLUME_BASE = f"/Volumes/{CATALOG}/raw/uploads"
 

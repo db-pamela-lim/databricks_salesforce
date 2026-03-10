@@ -23,7 +23,7 @@
 
 # COMMAND ----------
 
-CATALOG = "pl_epa_air_quality"
+CATALOG = "epa_air_quality"
 EXPERIMENT_NAME = "/Users/pamela.lim@databricks.com/port_pirie_lead_exceedance"
 MODEL_NAME = "port_pirie_lead_breach_predictor"
 

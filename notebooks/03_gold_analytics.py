@@ -16,7 +16,7 @@
 
 # COMMAND ----------
 
-CATALOG = "pl_epa_air_quality"
+CATALOG = "epa_air_quality"
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
