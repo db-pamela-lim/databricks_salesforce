@@ -18,7 +18,7 @@
 
 # COMMAND ----------
 
-CATALOG = "port_pirie_demo"
+CATALOG = "pl_epa_air_quality"
 EXPERIMENT_NAME = "/Users/port_pirie_lead_exceedance"
 MODEL_NAME = "port_pirie_lead_breach_predictor"
 

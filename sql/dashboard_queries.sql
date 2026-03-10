@@ -22,7 +22,7 @@ SELECT
     action_required,
     averaging_period,
     DATE_FORMAT(reading_timestamp, 'dd MMM yyyy HH:mm') AS as_at
-FROM port_pirie_demo.gold.permit_status_current
+FROM pl_epa_air_quality.gold.permit_status_current
 WHERE station_id = :station_id
 ORDER BY
     CASE permit_status
@@ -45,7 +45,7 @@ SELECT
     0.50                                        AS epa_limit,
     compliance_status,
     trigger_investigation
-FROM port_pirie_demo.gold.lead_rolling_weekly_avg
+FROM pl_epa_air_quality.gold.lead_rolling_weekly_avg
 WHERE station_id  = :station_id
   AND measurement_date BETWEEN :date_from AND :date_to
 ORDER BY measurement_date;
@@ -66,7 +66,7 @@ SELECT
     days_epa_limit_breached,
     0.45                                        AS site_target,
     0.50                                        AS epa_limit
-FROM port_pirie_demo.gold.pollutant_monthly_stats
+FROM pl_epa_air_quality.gold.pollutant_monthly_stats
 WHERE station_id  = :station_id
   AND month BETWEEN DATE_TRUNC('month', CAST(:date_from AS DATE))
                 AND DATE_TRUNC('month', CAST(:date_to   AS DATE))
@@ -81,7 +81,7 @@ SELECT
     ROUND(pm10_avg_ug_m3, 1)    AS pm10_daily_avg_ug_m3,
     ROUND(pm10_max_ug_m3, 1)    AS pm10_daily_max_ug_m3,
     50.0                        AS epa_limit_ug_m3
-FROM port_pirie_demo.gold.pollutant_daily_summary
+FROM pl_epa_air_quality.gold.pollutant_daily_summary
 WHERE station_id     = :station_id
   AND measurement_date BETWEEN :date_from AND :date_to
 ORDER BY measurement_date;
@@ -95,7 +95,7 @@ SELECT
     ROUND(so2_avg_ppm, 4)       AS so2_daily_avg_ppm,
     ROUND(so2_max_ppm, 4)       AS so2_daily_max_ppm,
     0.20                        AS epa_limit_ppm
-FROM port_pirie_demo.gold.pollutant_daily_summary
+FROM pl_epa_air_quality.gold.pollutant_daily_summary
 WHERE station_id     = :station_id
   AND measurement_date BETWEEN :date_from AND :date_to
 ORDER BY measurement_date;
@@ -111,7 +111,7 @@ SELECT
     risk_band,
     actual_breach,
     breach_predicted_3d
-FROM port_pirie_demo.gold.breach_predictions
+FROM pl_epa_air_quality.gold.breach_predictions
 WHERE measurement_date BETWEEN :date_from AND :date_to
 ORDER BY measurement_date;
 
@@ -131,7 +131,7 @@ SELECT
         WHEN pct_of_threshold > 110 THEN '🟠 BREACH'
         ELSE '🟡 APPROACHING'
     END                                                 AS severity
-FROM port_pirie_demo.gold.exceedance_log
+FROM pl_epa_air_quality.gold.exceedance_log
 WHERE event_timestamp BETWEEN :date_from AND :date_to
 ORDER BY event_timestamp DESC
 LIMIT 100;
@@ -152,8 +152,8 @@ SELECT
         ELSE 'Compliant'
     END                                         AS lead_status,
     p.risk_band                                 AS ml_risk_band
-FROM port_pirie_demo.gold.pollutant_daily_summary d
-LEFT JOIN port_pirie_demo.gold.breach_predictions p
+FROM pl_epa_air_quality.gold.pollutant_daily_summary d
+LEFT JOIN pl_epa_air_quality.gold.breach_predictions p
   ON d.measurement_date = p.measurement_date
 WHERE d.station_id     = :station_id
   AND d.measurement_date BETWEEN :date_from AND :date_to
@@ -175,6 +175,6 @@ SELECT
     unit,
     averaging_period,
     source                                      AS data_source
-FROM port_pirie_demo.salesforce.epa_limits
+FROM pl_epa_air_quality.salesforce.epa_limits
 WHERE station_id = :station_id
 ORDER BY pollutant;

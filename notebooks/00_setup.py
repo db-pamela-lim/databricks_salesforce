@@ -18,7 +18,7 @@
 # COMMAND ----------
 
 # Configure catalog name — update if your Databricks workspace uses a different catalog
-CATALOG = "port_pirie_demo"
+CATALOG = "pl_epa_air_quality"
 VOLUME_PATH = f"/Volumes/{CATALOG}/raw/uploads"
 
 spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
