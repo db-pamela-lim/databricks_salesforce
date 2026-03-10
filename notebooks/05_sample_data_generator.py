@@ -65,6 +65,7 @@ met_df = pd.DataFrame({
 
 met_spark = spark.createDataFrame(met_df).withColumn("station_id", F.lit(STATION_ID))
 (met_spark.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+ .option("delta.columnMapping.mode", "name")
  .saveAsTable(f"{CATALOG}.bronze.weather_raw"))
 print(f"✓ bronze.weather_raw: {met_spark.count():,} rows (10-min met)")
 
@@ -102,8 +103,9 @@ particle_df = pd.DataFrame({
 
 part_spark = spark.createDataFrame(particle_df).withColumn("station_id", F.lit(STATION_ID))
 (part_spark.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+ .option("delta.columnMapping.mode", "name")
  .saveAsTable(f"{CATALOG}.bronze.particle_raw"))
-print(f"✓ bronze.particle_raw: {part_spark.count():,} rows")
+print(f"\u2713 bronze.particle_raw: {part_spark.count():,} rows")
 
 # COMMAND ----------
 
@@ -140,6 +142,7 @@ gas_df = pd.DataFrame({
 
 gas_spark = spark.createDataFrame(gas_df).withColumn("station_id", F.lit(STATION_ID))
 (gas_spark.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+ .option("delta.columnMapping.mode", "name")
  .saveAsTable(f"{CATALOG}.bronze.gas_raw"))
 print(f"✓ bronze.gas_raw: {gas_spark.count():,} rows")
 
@@ -178,6 +181,7 @@ lead_df = pd.DataFrame({
 
 lead_spark = spark.createDataFrame(lead_df).withColumn("station_id", F.lit(STATION_ID))
 (lead_spark.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+ .option("delta.columnMapping.mode", "name")
  .saveAsTable(f"{CATALOG}.bronze.lead_in_air_raw"))
 print(f"✓ bronze.lead_in_air_raw: {lead_spark.count():,} daily rows (Oliver Street)")
 

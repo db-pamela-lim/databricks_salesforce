@@ -18,8 +18,13 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Fix pydantic dependency
+# MAGIC %pip install mlflow "pydantic<2" -q
+
+# COMMAND ----------
+
 CATALOG = "pl_epa_air_quality"
-EXPERIMENT_NAME = "/Users/port_pirie_lead_exceedance"
+EXPERIMENT_NAME = "/Users/pamela.lim@databricks.com/port_pirie_lead_exceedance"
 MODEL_NAME = "port_pirie_lead_breach_predictor"
 
 import mlflow
@@ -199,7 +204,7 @@ with mlflow.start_run(run_name="lead_breach_gbt_v1") as run:
 # COMMAND ----------
 
 # Load registered model from Unity Catalog
-model_uri = f"models:/{CATALOG}.gold.{MODEL_NAME}@champion"
+model_uri = f"runs:/{run_id}/model"
 loaded_model = mlflow.sklearn.load_model(model_uri)
 
 # Score full dataset
@@ -223,7 +228,7 @@ predictions_df = spark.createDataFrame(
     .format("delta").mode("overwrite").option("overwriteSchema", "true")
     .saveAsTable(f"{CATALOG}.gold.breach_predictions"))
 
-print(f"✓ gold.breach_predictions: {predictions_df.count():,} rows")
+print(f"\u2713 gold.breach_predictions: {predictions_df.count():,} rows")
 
 # Show recent forecast
 display(
@@ -263,7 +268,7 @@ if not high_risk.empty:
     # Using Databricks AI Functions (ai_query) — runs in SQL, shown here for demo context
     explanation = spark.sql(f"""
         SELECT ai_query(
-            'databricks-meta-llama-3-1-70b-instruct',
+            'databricks-meta-llama-3-3-70b-instruct',
             '{prompt.replace(chr(10), " ").replace("'", "''")}'
         ) AS safety_recommendation
     """)

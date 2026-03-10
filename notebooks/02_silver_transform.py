@@ -25,7 +25,7 @@ weather_raw = spark.table(f"{CATALOG}.bronze.weather_raw")
 weather_silver = (weather_raw
     .select(
         F.col("station_id"),
-        F.col("event_timestamp"),
+        F.to_timestamp(F.col("`Date Time`"), "dd/MM/yyyy HH:mm").alias("event_timestamp"),
         F.col("`Temperature Deg_C`").cast("double").alias("temperature_c"),
         F.col("`TSR W/m2`").cast("double").alias("solar_radiation_w_m2"),
         F.col("`Barometric Pressure hPa`").cast("double").alias("barometric_pressure_hpa"),
@@ -85,7 +85,7 @@ particle_raw = spark.table(f"{CATALOG}.bronze.particle_raw")
 particle_silver = (particle_raw
     .select(
         F.col("station_id"),
-        F.col("event_timestamp"),
+        F.to_timestamp(F.col("`Date/Time`"), "dd/MM/yyyy HH:mm").alias("event_timestamp"),
         F.col("`PM10 TEOM ug/m3`").cast("double").alias("pm10_teom_ug_m3"),
         F.col("`PM2.5 TEOM ug/m3`").cast("double").alias("pm25_teom_ug_m3"),
         F.col("`Temperature Deg C`").cast("double").alias("temperature_c"),
@@ -102,7 +102,7 @@ particle_silver = (particle_raw
     .format("delta").mode("overwrite").option("overwriteSchema", "true")
     .saveAsTable(f"{CATALOG}.silver.particle"))
 
-print(f"✓ silver.particle: {particle_silver.count():,} rows")
+print(f"\u2713 silver.particle: {particle_silver.count():,} rows")
 
 # COMMAND ----------
 
@@ -115,7 +115,7 @@ gas_raw = spark.table(f"{CATALOG}.bronze.gas_raw")
 gas_silver = (gas_raw
     .select(
         F.col("station_id"),
-        F.col("event_timestamp"),
+        F.to_timestamp(F.col("`Date/Time`"), "dd/MM/yyyy HH:mm").alias("event_timestamp"),
         F.col("`O3 UVA ppm`").cast("double").alias("o3_uva_ppm"),
         F.col("`O3 8hr UVA ppm`").cast("double").alias("o3_8hr_uva_ppm"),
         F.col("`NO Chemiluminescence ppm`").cast("double").alias("no_ppm"),
@@ -136,7 +136,7 @@ gas_silver = (gas_raw
     .format("delta").mode("overwrite").option("overwriteSchema", "true")
     .saveAsTable(f"{CATALOG}.silver.gas"))
 
-print(f"✓ silver.gas: {gas_silver.count():,} rows")
+print(f"\u2713 silver.gas: {gas_silver.count():,} rows")
 
 # COMMAND ----------
 
@@ -149,7 +149,7 @@ lead_raw = spark.table(f"{CATALOG}.bronze.lead_in_air_raw")
 lead_silver = (lead_raw
     .select(
         F.col("station_id"),
-        F.to_date(F.col("event_timestamp")).alias("measurement_date"),
+        F.to_date(F.col("DateTime"), "d/MM/yyyy").alias("measurement_date"),
         F.col("`Lead in Air (ug/m3)`").cast("double").alias("lead_in_air_ug_m3"),
     )
     .withColumn("data_quality_flag",
@@ -164,7 +164,7 @@ lead_silver = (lead_raw
     .format("delta").mode("overwrite").option("overwriteSchema", "true")
     .saveAsTable(f"{CATALOG}.silver.lead_in_air"))
 
-print(f"✓ silver.lead_in_air: {lead_silver.count():,} daily observations")
+print(f"\u2713 silver.lead_in_air: {lead_silver.count():,} daily observations")
 
 # COMMAND ----------
 
@@ -185,22 +185,44 @@ lead_hourly = (lead
     .withColumn("hour_ts",
         F.expr("explode(sequence(measurement_date, measurement_date, interval 1 hour))"))
     .withColumn("hour_ts", F.col("hour_ts").cast("timestamp"))
-    .select("station_id", "hour_ts", "lead_in_air_ug_m3")
+    .select(
+        F.col("station_id").alias("lead_station_id"),
+        "hour_ts", "lead_in_air_ug_m3")
 )
 
-combined = (particle
-    .join(gas,     ["station_id", "event_timestamp"], "outer")
-    .join(weather, particle["station_id"] == weather["station_id"], "left")
-        .where(particle["event_timestamp"] == weather["hour_ts"])
-        .drop(weather["station_id"])
-    .join(lead_hourly,
-          (particle["station_id"] == lead_hourly["station_id"]) &
-          (F.date_trunc("hour", particle["event_timestamp"]) == lead_hourly["hour_ts"]),
+# Step 1: Particle + Gas (shared hourly grain — equi-join deduplicates keys)
+pg = (particle
+    .drop("temperature_c", "barometric_pressure_atm", "data_quality_flag")
+    .join(gas.drop("data_quality_flag"),
+          ["station_id", "event_timestamp"], "outer")
+)
+
+# Step 2: Join with weather (rename to avoid ambiguity)
+weather_clean = (weather
+    .withColumnRenamed("station_id", "w_station_id")
+    .withColumnRenamed("hour_ts", "w_hour_ts")
+    .drop("data_quality_flag", "obs_count_per_hour",
+          "wind_vector_ew_m_s", "wind_vector_ns_m_s")
+)
+
+pgw = (pg
+    .join(weather_clean,
+          (F.col("station_id") == F.col("w_station_id")) &
+          (F.col("event_timestamp") == F.col("w_hour_ts")),
           "left")
-    .drop(lead_hourly["station_id"], lead_hourly["hour_ts"])
+    .drop("w_station_id", "w_hour_ts")
+)
+
+# Step 3: Join with lead (daily → hourly)
+combined = (pgw
+    .join(lead_hourly,
+          (F.col("station_id") == F.col("lead_station_id")) &
+          (F.date_trunc("hour", F.col("event_timestamp")) == F.col("hour_ts")),
+          "left")
+    .drop("lead_station_id", "hour_ts")
     .select(
-        particle["station_id"],
-        particle["event_timestamp"],
+        "station_id",
+        "event_timestamp",
         "pm10_teom_ug_m3", "pm25_teom_ug_m3",
         "so2_uvf_ppm", "o3_uva_ppm", "o3_8hr_uva_ppm",
         "no_ppm", "no2_ppm", "nox_ppm", "co_ppm", "co_8hr_ppm",
@@ -217,5 +239,5 @@ combined = (particle
     .format("delta").mode("overwrite").option("overwriteSchema", "true")
     .saveAsTable(f"{CATALOG}.silver.combined_hourly"))
 
-print(f"✓ silver.combined_hourly: {combined.count():,} rows")
+print(f"\u2713 silver.combined_hourly: {combined.count():,} rows")
 display(spark.table(f"{CATALOG}.silver.combined_hourly").limit(5))

@@ -31,6 +31,25 @@ from pyspark.sql.window import Window
 
 # COMMAND ----------
 
+# Seed the EPA regulatory limits table (normally synced from Salesforce)
+spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {CATALOG}.salesforce.epa_limits (
+        station_id       STRING,
+        pollutant        STRING,
+        limit_value      DOUBLE  COMMENT 'SA EPA regulatory limit',
+        site_target      DOUBLE  COMMENT 'Nyrstar site-specific target (stricter)',
+        unit             STRING,
+        averaging_period STRING
+    )
+""")
+spark.sql(f"""
+    INSERT OVERWRITE {CATALOG}.salesforce.epa_limits
+    VALUES
+        ('PTP01', 'Lead in Air', 0.50, 0.45, 'ug/m3', '7-day rolling'),
+        ('PTP01', 'PM10',        50.0, 40.0, 'ug/m3', '24-hour'),
+        ('PTP01', 'SO2',         0.20, 0.15, 'ppm',   '1-hour')
+""")
+
 lead = spark.table(f"{CATALOG}.silver.lead_in_air")
 limits = spark.table(f"{CATALOG}.salesforce.epa_limits").filter("pollutant = 'Lead in Air'")
 
@@ -121,38 +140,44 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType, B
 spark.sql(f"""
     CREATE OR REPLACE TABLE {CATALOG}.gold.permit_status_current AS
     WITH latest_readings AS (
-        SELECT
-            station_id,
-            event_timestamp,
-            pm10_teom_ug_m3   AS current_value,
-            'PM10'             AS pollutant,
-            'ug/m3'            AS unit
-        FROM {CATALOG}.silver.combined_hourly
-        WHERE pm10_teom_ug_m3 IS NOT NULL
-        ORDER BY event_timestamp DESC LIMIT 1
+        SELECT * FROM (
+            SELECT
+                station_id,
+                event_timestamp,
+                pm10_teom_ug_m3   AS current_value,
+                'PM10'             AS pollutant,
+                'ug/m3'            AS unit
+            FROM {CATALOG}.silver.combined_hourly
+            WHERE pm10_teom_ug_m3 IS NOT NULL
+            ORDER BY event_timestamp DESC LIMIT 1
+        )
 
         UNION ALL
 
-        SELECT
-            station_id,
-            event_timestamp,
-            so2_uvf_ppm        AS current_value,
-            'SO2'              AS pollutant,
-            'ppm'              AS unit
-        FROM {CATALOG}.silver.combined_hourly
-        WHERE so2_uvf_ppm IS NOT NULL
-        ORDER BY event_timestamp DESC LIMIT 1
+        SELECT * FROM (
+            SELECT
+                station_id,
+                event_timestamp,
+                so2_uvf_ppm        AS current_value,
+                'SO2'              AS pollutant,
+                'ppm'              AS unit
+            FROM {CATALOG}.silver.combined_hourly
+            WHERE so2_uvf_ppm IS NOT NULL
+            ORDER BY event_timestamp DESC LIMIT 1
+        )
 
         UNION ALL
 
-        SELECT
-            station_id,
-            CAST(measurement_date AS TIMESTAMP) AS event_timestamp,
-            rolling_7day_avg_lead_ug_m3         AS current_value,
-            'Lead in Air'                        AS pollutant,
-            'ug/m3'                              AS unit
-        FROM {CATALOG}.gold.lead_rolling_weekly_avg
-        ORDER BY measurement_date DESC LIMIT 1
+        SELECT * FROM (
+            SELECT
+                station_id,
+                CAST(measurement_date AS TIMESTAMP) AS event_timestamp,
+                rolling_7day_avg_lead_ug_m3         AS current_value,
+                'Lead in Air'                        AS pollutant,
+                'ug/m3'                              AS unit
+            FROM {CATALOG}.gold.lead_rolling_weekly_avg
+            ORDER BY measurement_date DESC LIMIT 1
+        )
     )
     SELECT
         r.station_id,
@@ -181,7 +206,7 @@ spark.sql(f"""
      AND r.pollutant  = l.pollutant
 """)
 
-print("✓ gold.permit_status_current")
+print("\u2713 gold.permit_status_current")
 display(spark.table(f"{CATALOG}.gold.permit_status_current"))
 
 # COMMAND ----------
