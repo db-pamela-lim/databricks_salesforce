@@ -1,0 +1,9 @@
+command: ["streamlit", "run", "app/app.py", "--server.port", "8080", "--server.headless", "true"]
+
+env:
+  # Set this to your SQL warehouse HTTP path in Databricks
+  # e.g. /sql/1.0/warehouses/abc123def456
+  - name: DATABRICKS_WAREHOUSE_HTTP_PATH
+    value: "/sql/1.0/warehouses/your_warehouse_id"
+  # DATABRICKS_HOST and DATABRICKS_TOKEN are injected automatically by the
+  # Databricks App runtime — do not set them here.
