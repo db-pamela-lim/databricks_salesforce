@@ -1,6 +1,14 @@
 bundle:
   name: epa_air_quality
 
+# Exclude the app directory — the Databricks App is deployed separately
+# via the UI connected directly to the GitHub repo (see app/app.yaml).
+sync:
+  exclude:
+    - app/
+    - job_definition.json
+    - "*.md"
+
 variables:
   catalog:
     default: epa_air_quality
