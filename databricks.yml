@@ -1,0 +1,92 @@
+bundle:
+  name: epa_air_quality
+
+variables:
+  catalog:
+    default: epa_air_quality
+    description: Unity Catalog name
+  cluster_node_type:
+    default: i3.xlarge
+    description: Worker node type for job cluster
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: ${workspace.host}
+
+  prod:
+    mode: production
+    workspace:
+      host: ${workspace.host}
+
+resources:
+  jobs:
+    epa_air_quality_pipeline:
+      name: "EPA Air Quality — Full Pipeline"
+      description: >
+        Runs the Port Pirie air quality demo pipeline end-to-end.
+        Task order: sample data → silver transform → gold analytics → ML + advisories.
+        Notebook 05 is used in place of CSV ingestion (notebook 01) for demo purposes.
+
+      # ── Job-level cluster (shared across all tasks) ───────────────────────
+      job_clusters:
+        - job_cluster_key: pipeline_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.cluster_node_type}
+            num_workers: 2
+            spark_conf:
+              spark.databricks.delta.preview.enabled: "true"
+            data_security_mode: SINGLE_USER
+
+      # ── Email notifications ───────────────────────────────────────────────
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      # ── Tasks ─────────────────────────────────────────────────────────────
+      tasks:
+
+        # Task 1 — Generate sample data (bronze tables)
+        - task_key: sample_data
+          description: "Populate bronze Delta tables with 3 years of synthetic monitoring data"
+          job_cluster_key: pipeline_cluster
+          notebook_task:
+            notebook_path: ./notebooks/05_sample_data_generator
+            base_parameters:
+              catalog: ${var.catalog}
+
+        # Task 2 — Silver transform
+        - task_key: silver_transform
+          description: "Cleanse, cast, resample and join all sources into silver.combined_hourly"
+          depends_on:
+            - task_key: sample_data
+          job_cluster_key: pipeline_cluster
+          notebook_task:
+            notebook_path: ./notebooks/02_silver_transform
+            base_parameters:
+              catalog: ${var.catalog}
+
+        # Task 3 — Gold analytics
+        - task_key: gold_analytics
+          description: "Build rolling averages, permit status, exceedance log and monthly stats"
+          depends_on:
+            - task_key: silver_transform
+          job_cluster_key: pipeline_cluster
+          notebook_task:
+            notebook_path: ./notebooks/03_gold_analytics
+            base_parameters:
+              catalog: ${var.catalog}
+
+        # Task 4 — ML model + school advisories
+        - task_key: ml_and_advisories
+          description: "Train breach predictor, score predictions, generate school advisories via ai_query"
+          depends_on:
+            - task_key: gold_analytics
+          job_cluster_key: pipeline_cluster
+          notebook_task:
+            notebook_path: ./notebooks/04_ml_exceedance_prediction
+            base_parameters:
+              catalog: ${var.catalog}

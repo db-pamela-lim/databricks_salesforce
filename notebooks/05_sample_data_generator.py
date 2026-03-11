@@ -12,7 +12,8 @@
 
 # COMMAND ----------
 
-CATALOG = "epa_air_quality"
+dbutils.widgets.text("catalog", "epa_air_quality")
+CATALOG = dbutils.widgets.get("catalog")
 STATION_ID = "PTP01"
 
 import pandas as pd

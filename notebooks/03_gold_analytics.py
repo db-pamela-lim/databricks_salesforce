@@ -16,7 +16,8 @@
 
 # COMMAND ----------
 
-CATALOG = "epa_air_quality"
+dbutils.widgets.text("catalog", "epa_air_quality")
+CATALOG = dbutils.widgets.get("catalog")
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window

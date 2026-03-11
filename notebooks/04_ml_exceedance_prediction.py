@@ -23,7 +23,8 @@
 
 # COMMAND ----------
 
-CATALOG = "epa_air_quality"
+dbutils.widgets.text("catalog", "epa_air_quality")
+CATALOG = dbutils.widgets.get("catalog")
 EXPERIMENT_NAME = "/Users/pamela.lim@databricks.com/port_pirie_lead_exceedance"
 MODEL_NAME = "port_pirie_lead_breach_predictor"
 
