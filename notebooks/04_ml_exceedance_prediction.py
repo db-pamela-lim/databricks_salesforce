@@ -357,22 +357,17 @@ if advisories:
         schema=schema,
     )
 
-    # Merge so re-runs don't duplicate — one advisory per station per date
+    # Merge so re-runs don't duplicate — one advisory per station per date.
+    # Table is created (empty) by notebook 03_gold_analytics before this runs.
     advisories_df.createOrReplaceTempView("new_advisories")
     spark.sql(f"""
         MERGE INTO {CATALOG}.gold.school_air_quality_advisories AS target
         USING new_advisories AS source
-          ON target.station_id   = source.station_id
+          ON target.station_id    = source.station_id
          AND target.advisory_date = source.advisory_date
         WHEN MATCHED THEN UPDATE SET *
         WHEN NOT MATCHED THEN INSERT *
-    """) if spark.catalog.tableExists(f"{CATALOG}.gold.school_air_quality_advisories") else (
-        advisories_df.write
-            .format("delta")
-            .mode("overwrite")
-            .option("overwriteSchema", "true")
-            .saveAsTable(f"{CATALOG}.gold.school_air_quality_advisories")
-    )
+    """)
 
     print(f"\n✓ {len(advisories)} advisories saved to gold.school_air_quality_advisories")
     display(spark.table(f"{CATALOG}.gold.school_air_quality_advisories")
