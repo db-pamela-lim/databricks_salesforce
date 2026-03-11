@@ -187,5 +187,182 @@ print(f"✓ bronze.lead_in_air_raw: {lead_spark.count():,} daily rows (Oliver St
 
 # COMMAND ----------
 
+# MAGIC %md ## Seed School Air Quality Advisories
+# MAGIC
+# MAGIC Pre-populates `gold.school_air_quality_advisories` with a realistic mix of:
+# MAGIC - **HIGH risk** advisory days (smelter plume events)
+# MAGIC - **MEDIUM risk** advisory days (elevated but below breach)
+# MAGIC - **Gap periods** with no advisory (compliant — demonstrates the absence state)
+# MAGIC
+# MAGIC This lets the app Schools Advisory tab showcase both states without needing
+# MAGIC notebook 04's ML pipeline to run first.
+
+# COMMAND ----------
+
+from datetime import date
+
+sample_advisories = [
+    # ── HIGH risk episode 1: Feb 2022 (aligns with breach_period 1 above) ─────
+    {
+        "advisory_date":      date(2022, 2, 3),
+        "station_id":         "PTP01",
+        "risk_band":          "HIGH",
+        "rolling_7day_avg":   0.61,
+        "breach_probability": 0.87,
+        "advisory_text": (
+            "Dear Principal, our air quality monitoring station at Oliver Street is currently "
+            "recording elevated Lead in Air levels, with the 7-day average reaching 0.61 μg/m³ — "
+            "above the safe site limit of 0.45 μg/m³. We are asking all Port Pirie schools to "
+            "postpone outdoor physical education, sports carnivals, and extended recess or lunch "
+            "play until further notice, and to keep students indoors with windows closed where "
+            "possible. Please contact your school nurse if any student reports headaches, fatigue, "
+            "or other symptoms. Please be assured that monitoring is continuous and we will "
+            "provide an updated advisory each morning until conditions return to normal."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2022-02-03 07:00:00"),
+    },
+    {
+        "advisory_date":      date(2022, 2, 7),
+        "station_id":         "PTP01",
+        "risk_band":          "HIGH",
+        "rolling_7day_avg":   0.58,
+        "breach_probability": 0.81,
+        "advisory_text": (
+            "Dear Principal, Lead in Air levels at Oliver Street remain elevated today, with the "
+            "7-day rolling average at 0.58 μg/m³. The restriction on outdoor activities continues "
+            "— please keep students inside during recess and lunch and cancel any scheduled "
+            "outdoor PE or sport. Wind conditions are expected to shift this afternoon, which may "
+            "improve dispersion; we will reassess for tomorrow's advisory. Monitoring is "
+            "continuous and your school will receive an update by 7 am each day."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2022-02-07 07:00:00"),
+    },
+    {
+        "advisory_date":      date(2022, 2, 14),
+        "station_id":         "PTP01",
+        "risk_band":          "MEDIUM",
+        "rolling_7day_avg":   0.49,
+        "breach_probability": 0.54,
+        "advisory_text": (
+            "Dear Principal, Lead in Air levels at Oliver Street are improving but remain "
+            "slightly above the 0.45 μg/m³ site target, with the 7-day average now at 0.49 μg/m³. "
+            "We are moving to a MEDIUM caution level: outdoor activity sessions may resume but "
+            "should be limited to no more than 20 minutes, and vigorous physical activity outdoors "
+            "should be avoided for now. Please check the midday update before making decisions "
+            "about afternoon activities. We appreciate your patience and will continue daily "
+            "monitoring updates until we are fully back within safe limits."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2022-02-14 07:00:00"),
+    },
+
+    # ── Gap: Feb 2022 late → Jul 2023 (no advisories — compliant period) ──────
+    # (No rows inserted — the absence is the demo point)
+
+    # ── HIGH risk episode 2: Jul 2023 (aligns with breach_period 2 above) ─────
+    {
+        "advisory_date":      date(2023, 7, 1),
+        "station_id":         "PTP01",
+        "risk_band":          "HIGH",
+        "rolling_7day_avg":   0.72,
+        "breach_probability": 0.93,
+        "advisory_text": (
+            "Dear Principal, we are issuing a HIGH air quality alert for Port Pirie schools today. "
+            "The Lead in Air 7-day rolling average at Oliver Street has reached 0.72 μg/m³ — "
+            "significantly above the 0.45 μg/m³ safe limit — following persistent north-westerly "
+            "winds carrying the smelter plume toward the school zone. All outdoor activities "
+            "must be postponed immediately, including recess, lunch play, PE classes, and any "
+            "after-school sport on school grounds. Students with known lead sensitivity should "
+            "be monitored closely. Our team is working with Nyrstar to understand the cause and "
+            "we will provide a full update by 7 am tomorrow. Thank you for your cooperation in "
+            "keeping our students safe."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2023-07-01 07:00:00"),
+    },
+    {
+        "advisory_date":      date(2023, 7, 8),
+        "station_id":         "PTP01",
+        "risk_band":          "MEDIUM",
+        "rolling_7day_avg":   0.51,
+        "breach_probability": 0.61,
+        "advisory_text": (
+            "Dear Principal, we are pleased to advise that Lead in Air levels at Oliver Street "
+            "are trending downward, with the 7-day average now at 0.51 μg/m³. We are moving "
+            "from a HIGH to a MEDIUM caution level. Outdoor activity sessions may resume in "
+            "shorter blocks of up to 20 minutes, but please avoid vigorous sport and extended "
+            "outdoor periods until further notice. Please check the midday air quality update "
+            "before planning afternoon outdoor activities. We will continue daily advisories "
+            "until levels return fully within safe limits — thank you for your ongoing support."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2023-07-08 07:00:00"),
+    },
+
+    # ── Gap: Aug 2023 → Sep 2024 (long compliant stretch — no advisories) ─────
+
+    # ── MEDIUM risk episode 3: Oct 2024 (aligns with breach_period 3 above) ───
+    {
+        "advisory_date":      date(2024, 10, 12),
+        "station_id":         "PTP01",
+        "risk_band":          "MEDIUM",
+        "rolling_7day_avg":   0.47,
+        "breach_probability": 0.58,
+        "advisory_text": (
+            "Dear Principal, our predictive monitoring model is showing a MEDIUM risk level "
+            "for Lead in Air at Oliver Street today, with the 7-day average at 0.47 μg/m³ — "
+            "just above the 0.45 μg/m³ site target. While levels are not at a critical high, "
+            "we recommend limiting outdoor activity sessions to 20 minutes or less today and "
+            "avoiding vigorous physical activity outdoors. Spring conditions with variable "
+            "winds may cause short-term fluctuations; please check the midday update before "
+            "scheduling afternoon outdoor sessions. As always, monitoring is continuous and "
+            "you will receive an updated advisory each morning."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2024-10-12 07:00:00"),
+    },
+    {
+        "advisory_date":      date(2024, 10, 18),
+        "station_id":         "PTP01",
+        "risk_band":          "HIGH",
+        "rolling_7day_avg":   0.55,
+        "breach_probability": 0.79,
+        "advisory_text": (
+            "Dear Principal, Lead in Air levels at Oliver Street have increased over the past "
+            "week, with the 7-day rolling average now at 0.55 μg/m³ — above the safe site "
+            "limit of 0.45 μg/m³. We are escalating to a HIGH caution level. Please postpone "
+            "all outdoor physical education, recess play, and any planned sports events until "
+            "further notice. Keep classroom windows closed during the middle of the day when "
+            "wind conditions are most likely to carry the plume toward the school zone. "
+            "We expect conditions to improve by the weekend and will advise accordingly. "
+            "Thank you for your understanding and cooperation."
+        ),
+        "audience":      "School principals and teachers — Port Pirie",
+        "generated_at":  pd.Timestamp("2024-10-18 07:00:00"),
+    },
+]
+
+advisories_pdf = pd.DataFrame(sample_advisories)
+advisories_pdf["advisory_date"] = pd.to_datetime(advisories_pdf["advisory_date"])
+
+advisories_spark = spark.createDataFrame(advisories_pdf)
+advisories_spark.createOrReplaceTempView("sample_advisories")
+
+spark.sql(f"""
+    MERGE INTO {CATALOG}.gold.school_air_quality_advisories AS target
+    USING sample_advisories AS source
+      ON target.station_id    = source.station_id
+     AND target.advisory_date = source.advisory_date
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *
+""")
+
+print(f"✓ gold.school_air_quality_advisories seeded with {len(sample_advisories)} example advisories")
+display(spark.table(f"{CATALOG}.gold.school_air_quality_advisories").orderBy("advisory_date"))
+
+# COMMAND ----------
+
 print("\nSample data generation complete.")
 print("Proceed to 02_silver_transform →")
