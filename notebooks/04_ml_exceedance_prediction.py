@@ -254,37 +254,128 @@ display(
 
 # COMMAND ----------
 
-# MAGIC %md ## 5. What drives high-risk days?
+# MAGIC %md ## 5. School Community Air Quality Advisories
 # MAGIC
-# MAGIC Using Databricks AI Functions to generate a natural language explanation
-# MAGIC of the most recent high-risk day — ready for the Genie demo.
+# MAGIC Uses Databricks `ai_query()` to generate plain-English advisories for Port Pirie
+# MAGIC schools, recommending how to adjust outdoor activities based on current and
+# MAGIC forecast Lead in Air levels. One advisory is generated per HIGH or MEDIUM risk day
+# MAGIC and persisted to `gold.school_air_quality_advisories` for distribution.
 
 # COMMAND ----------
 
-# Pull most recent HIGH risk record for narrative
-high_risk = (spark.table(f"{CATALOG}.gold.breach_predictions")
-    .filter("risk_band = 'HIGH'")
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, DateType, TimestampType
+import pyspark.sql.functions as F
+
+# Pull all HIGH and MEDIUM risk days not yet advised (last 30 days for demo)
+risk_days = (spark.table(f"{CATALOG}.gold.breach_predictions")
+    .filter("risk_band IN ('HIGH', 'MEDIUM')")
+    .filter("measurement_date >= current_date() - interval 30 days")
     .orderBy("measurement_date", ascending=False)
-    .limit(1)
     .toPandas())
 
-if not high_risk.empty:
-    row = high_risk.iloc[0]
-    prompt = f"""
-    Port Pirie Oliver Street monitoring station (PTP01) recorded a HIGH risk of Lead in Air
-    exceeding 0.45 ug/m3 on {row['measurement_date'].date()}.
-    The 7-day rolling average was {row['lead_rolling_7day_avg']:.3f} ug/m3
-    with a predicted breach probability of {row['breach_probability_3d']:.0%}.
+print(f"Generating school advisories for {len(risk_days)} HIGH/MEDIUM risk days…")
 
-    In 2-3 sentences, explain what this means for outdoor work permits and
-    what safety actions the site manager should take.
-    """
+advisories = []
 
-    # Using Databricks AI Functions (ai_query) — runs in SQL, shown here for demo context
-    explanation = spark.sql(f"""
+for _, row in risk_days.iterrows():
+    risk      = row["risk_band"]
+    prob_pct  = row["breach_probability_3d"] * 100
+    rolling   = row["lead_rolling_7day_avg"]
+    mdate     = row["measurement_date"]
+
+    if risk == "HIGH":
+        outdoor_guidance = (
+            "Postpone all outdoor physical education, sports carnivals, and recess/lunch "
+            "outdoor play until further notice. Keep students indoors with windows closed "
+            "where possible. Contact the school nurse if any student reports symptoms."
+        )
+    else:  # MEDIUM
+        outdoor_guidance = (
+            "Shorten outdoor activity periods to no more than 20 minutes. "
+            "Avoid vigorous physical activity outdoors. Monitor the air quality "
+            "update at midday before making decisions about afternoon activities."
+        )
+
+    prompt = (
+        f"You are writing a brief, friendly air quality advisory for principals and teachers "
+        f"at primary and secondary schools in Port Pirie, South Australia. "
+        f"The advisory is for {mdate.strftime('%A %d %B %Y')}. "
+        f"The Lead in Air monitoring station at Oliver Street (near the school zone) "
+        f"is showing a {risk} risk level. "
+        f"The 7-day rolling average is {rolling:.3f} ug/m3 against a safe limit of 0.45 ug/m3. "
+        f"Our predictive model estimates a {prob_pct:.0f}% probability that this limit will be "
+        f"breached in the next 3 days. "
+        f"Outdoor activity guidance for today: {outdoor_guidance} "
+        f"Write a 3-4 sentence advisory in plain, calm language suitable for school staff. "
+        f"Do not use technical jargon. Start with 'Dear Principal,' and end with a reassurance "
+        f"that monitoring is continuous and updates will be provided daily."
+    )
+
+    result = spark.sql(f"""
         SELECT ai_query(
             'databricks-meta-llama-3-3-70b-instruct',
-            '{prompt.replace(chr(10), " ").replace("'", "''")}'
-        ) AS safety_recommendation
-    """)
-    display(explanation)
+            '{prompt.replace(chr(39), chr(39)+chr(39))}'
+        ) AS advisory_text
+    """).collect()[0]["advisory_text"]
+
+    advisories.append({
+        "advisory_date":       mdate.date(),
+        "station_id":          "PTP01",
+        "risk_band":           risk,
+        "rolling_7day_avg":    float(rolling),
+        "breach_probability":  float(row["breach_probability_3d"]),
+        "advisory_text":       result,
+        "audience":            "School principals and teachers — Port Pirie",
+        "generated_at":        pd.Timestamp.now(),
+    })
+    print(f"  ✓ {mdate.date()} [{risk}] advisory generated")
+
+# COMMAND ----------
+
+# MAGIC %md ### Persist advisories to Delta table
+
+# COMMAND ----------
+
+if advisories:
+    schema = StructType([
+        StructField("advisory_date",      DateType()),
+        StructField("station_id",         StringType()),
+        StructField("risk_band",          StringType()),
+        StructField("rolling_7day_avg",   DoubleType()),
+        StructField("breach_probability", DoubleType()),
+        StructField("advisory_text",      StringType()),
+        StructField("audience",           StringType()),
+        StructField("generated_at",       TimestampType()),
+    ])
+
+    advisories_df = spark.createDataFrame(
+        pd.DataFrame(advisories).astype({
+            "advisory_date": "object",
+            "rolling_7day_avg": "float64",
+            "breach_probability": "float64",
+        }),
+        schema=schema,
+    )
+
+    # Merge so re-runs don't duplicate — one advisory per station per date
+    advisories_df.createOrReplaceTempView("new_advisories")
+    spark.sql(f"""
+        MERGE INTO {CATALOG}.gold.school_air_quality_advisories AS target
+        USING new_advisories AS source
+          ON target.station_id   = source.station_id
+         AND target.advisory_date = source.advisory_date
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+    """) if spark.catalog.tableExists(f"{CATALOG}.gold.school_air_quality_advisories") else (
+        advisories_df.write
+            .format("delta")
+            .mode("overwrite")
+            .option("overwriteSchema", "true")
+            .saveAsTable(f"{CATALOG}.gold.school_air_quality_advisories")
+    )
+
+    print(f"\n✓ {len(advisories)} advisories saved to gold.school_air_quality_advisories")
+    display(spark.table(f"{CATALOG}.gold.school_air_quality_advisories")
+            .orderBy("advisory_date", ascending=False))
+else:
+    print("No HIGH or MEDIUM risk days in the last 30 days — no advisories generated.")
