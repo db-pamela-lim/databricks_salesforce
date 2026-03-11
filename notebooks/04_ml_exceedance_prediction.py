@@ -35,7 +35,7 @@ import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import (roc_auc_score, classification_report,
-                              ConfusionMatrixDisplay)
+                              ConfusionMatrixDisplay, average_precision_score)
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
@@ -149,8 +149,20 @@ with mlflow.start_run(run_name="lead_breach_gbt_v1") as run:
     # Evaluate
     val_probs = pipeline.predict_proba(X_val)[:, 1]
     val_preds = (val_probs >= 0.5).astype(int)
-    auc  = roc_auc_score(y_val, val_probs)
-    report = classification_report(y_val, val_preds, output_dict=True)
+
+    n_classes = y_val.nunique()
+    if n_classes < 2:
+        print(f"⚠️  Validation set contains only one class ({y_val.unique()}) — "
+              f"AUC-ROC not defined. Consider widening the validation window or "
+              f"checking that breach events exist in the selected date range.")
+        auc = float("nan")
+        avg_precision = float("nan")
+    else:
+        auc           = roc_auc_score(y_val, val_probs)
+        avg_precision = average_precision_score(y_val, val_probs)
+
+    report = classification_report(y_val, val_preds, output_dict=True,
+                                   zero_division=0)
 
     # Log params & metrics
     mlflow.log_param("model_type", "GradientBoostingClassifier")
@@ -159,11 +171,14 @@ with mlflow.start_run(run_name="lead_breach_gbt_v1") as run:
     mlflow.log_param("features", FEATURES)
     mlflow.log_param("prediction_horizon_days", 3)
     mlflow.log_param("threshold_ug_m3", 0.45)
+    mlflow.log_param("val_classes_present", int(n_classes))
 
-    mlflow.log_metric("val_auc_roc", round(auc, 4))
-    mlflow.log_metric("val_precision_breach", round(report["1"]["precision"], 3))
-    mlflow.log_metric("val_recall_breach",    round(report["1"]["recall"], 3))
-    mlflow.log_metric("val_f1_breach",        round(report["1"]["f1-score"], 3))
+    if not pd.isna(auc):
+        mlflow.log_metric("val_auc_roc", round(auc, 4))
+        mlflow.log_metric("val_avg_precision", round(avg_precision, 4))
+    mlflow.log_metric("val_precision_breach", round(report.get("1", {}).get("precision", 0), 3))
+    mlflow.log_metric("val_recall_breach",    round(report.get("1", {}).get("recall", 0), 3))
+    mlflow.log_metric("val_f1_breach",        round(report.get("1", {}).get("f1-score", 0), 3))
 
     # Feature importance chart
     fi = pd.Series(
@@ -190,9 +205,9 @@ with mlflow.start_run(run_name="lead_breach_gbt_v1") as run:
 
     run_id = run.info.run_id
     print(f"\n✓ MLflow run: {run_id}")
-    print(f"  Validation AUC-ROC: {auc:.4f}")
-    print(f"  Precision (breach): {report['1']['precision']:.3f}")
-    print(f"  Recall (breach):    {report['1']['recall']:.3f}")
+    print(f"  Validation AUC-ROC: {auc:.4f}" if not pd.isna(auc) else "  Validation AUC-ROC: N/A (single class in val set)")
+    print(f"  Precision (breach): {report.get('1', {}).get('precision', 0):.3f}")
+    print(f"  Recall (breach):    {report.get('1', {}).get('recall', 0):.3f}")
 
 # COMMAND ----------
 
