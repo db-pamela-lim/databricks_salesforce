@@ -14,12 +14,14 @@ targets:
     mode: development
     default: true
     workspace:
-      host: ${workspace.host}
+      host: https://dbc-c4bffbe5-cb79.cloud.databricks.com
+      profile: epa-demo
 
   prod:
     mode: production
     workspace:
-      host: ${workspace.host}
+      host: https://dbc-c4bffbe5-cb79.cloud.databricks.com
+      profile: epa-demo
 
 resources:
   jobs:
