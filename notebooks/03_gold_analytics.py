@@ -31,23 +31,36 @@ from pyspark.sql.window import Window
 
 # COMMAND ----------
 
-# Seed the EPA regulatory limits table (normally synced from Salesforce)
+# Seed the EPA regulatory limits table (normally synced from Salesforce via Data360)
+# Schema matches the 12-column definition created in notebook 00_setup.
 spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {CATALOG}.salesforce.epa_limits (
+        license_id       STRING,
+        account_name     STRING,
+        license_type     STRING,
         station_id       STRING,
         pollutant        STRING,
-        limit_value      DOUBLE  COMMENT 'SA EPA regulatory limit',
-        site_target      DOUBLE  COMMENT 'Nyrstar site-specific target (stricter)',
+        column_ref       STRING,
+        limit_value      DOUBLE    COMMENT 'SA EPA regulatory limit',
+        site_target      DOUBLE    COMMENT 'Nyrstar site-specific target (stricter)',
         unit             STRING,
-        averaging_period STRING
+        averaging_period STRING,
+        source           STRING,
+        last_updated     TIMESTAMP
     )
 """)
 spark.sql(f"""
     INSERT OVERWRITE {CATALOG}.salesforce.epa_limits
     VALUES
-        ('PTP01', 'Lead in Air', 0.50, 0.45, 'ug/m3', '7-day rolling'),
-        ('PTP01', 'PM10',        50.0, 40.0, 'ug/m3', '24-hour'),
-        ('PTP01', 'SO2',         0.20, 0.15, 'ppm',   '1-hour')
+        ('LIC-2024-NPP-001', 'Nyrstar Port Pirie', 'Multi-Metal Smelter and Refinery',
+         'PTP01', 'Lead in Air', 'lead_in_air_ug_m3', 0.50, 0.45, 'ug/m3', 'rolling_7_day',
+         'Salesforce_Data360', current_timestamp()),
+        ('LIC-2024-NPP-001', 'Nyrstar Port Pirie', 'Multi-Metal Smelter and Refinery',
+         'PTP01', 'PM10', 'pm10_teom_ug_m3', 50.0, 50.0, 'ug/m3', '24_hour',
+         'Salesforce_Data360', current_timestamp()),
+        ('LIC-2024-NPP-001', 'Nyrstar Port Pirie', 'Multi-Metal Smelter and Refinery',
+         'PTP01', 'SO2', 'so2_uvf_ppm', 0.20, 0.20, 'ppm', '1_hour',
+         'Salesforce_Data360', current_timestamp())
 """)
 
 lead = spark.table(f"{CATALOG}.silver.lead_in_air")
