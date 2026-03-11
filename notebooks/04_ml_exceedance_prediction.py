@@ -266,14 +266,31 @@ display(
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, DateType, TimestampType
 import pyspark.sql.functions as F
 
-# Pull all HIGH and MEDIUM risk days not yet advised (last 30 days for demo)
-risk_days = (spark.table(f"{CATALOG}.gold.breach_predictions")
-    .filter("risk_band IN ('HIGH', 'MEDIUM')")
-    .filter("measurement_date >= current_date() - interval 30 days")
-    .orderBy("measurement_date", ascending=False)
-    .toPandas())
+# For showcase: pick up to 2 representative HIGH and 2 MEDIUM risk days spread
+# across the full date range — one from the first half of the data, one from
+# the second half — so the demo always has advisories to generate regardless
+# of how recent the data is.
+predictions = spark.table(f"{CATALOG}.gold.breach_predictions").filter(
+    "risk_band IN ('HIGH', 'MEDIUM')"
+).toPandas()
 
-print(f"Generating school advisories for {len(risk_days)} HIGH/MEDIUM risk days…")
+showcase_days = pd.DataFrame()
+if not predictions.empty:
+    predictions["measurement_date"] = pd.to_datetime(predictions["measurement_date"])
+    mid = predictions["measurement_date"].min() + (
+        predictions["measurement_date"].max() - predictions["measurement_date"].min()
+    ) / 2
+    for band in ["HIGH", "MEDIUM"]:
+        subset = predictions[predictions["risk_band"] == band]
+        early  = subset[subset["measurement_date"] <= mid].nlargest(1, "breach_probability_3d")
+        late   = subset[subset["measurement_date"] >  mid].nlargest(1, "breach_probability_3d")
+        showcase_days = pd.concat([showcase_days, early, late])
+
+risk_days = showcase_days.drop_duplicates("measurement_date").sort_values(
+    "measurement_date", ascending=False
+).reset_index(drop=True)
+
+print(f"Generating school advisories for {len(risk_days)} showcase HIGH/MEDIUM risk days…")
 
 advisories = []
 
@@ -373,4 +390,4 @@ if advisories:
     display(spark.table(f"{CATALOG}.gold.school_air_quality_advisories")
             .orderBy("advisory_date", ascending=False))
 else:
-    print("No HIGH or MEDIUM risk days in the last 30 days — no advisories generated.")
+    print("No HIGH or MEDIUM risk days found in breach_predictions — run 03_gold_analytics first.")
