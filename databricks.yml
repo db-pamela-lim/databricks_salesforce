@@ -46,7 +46,7 @@ resources:
       # ── Email notifications ───────────────────────────────────────────────
       email_notifications:
         on_failure:
-          - ${workspace.current_user.userName}
+          - pamela.lim@databricks.com
 
       # ── Tasks ─────────────────────────────────────────────────────────────
       tasks:
